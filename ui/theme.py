@@ -186,6 +186,8 @@ p, li {{ line-height: 1.62; }}
 .nx-score .bar {{ flex:none; width:90px; height:6px; border-radius:3px; background:var(--mist); overflow:hidden; }}
 .nx-score .bar > span {{ display:block; height:100%; background:var(--patina); }}
 
+.nx-passage {{ font-size:.88rem; line-height:1.55; color:var(--muted); margin:.35rem 0 1.1rem;
+  white-space: pre-wrap; overflow-wrap:anywhere; }}
 .nx-memory {{ padding:.7rem 0; border-bottom:1px solid var(--mist); }}
 .nx-memory b {{ font-weight:500; color:var(--ink); }}
 .nx-memory span {{ display:block; font-size:.78rem; color:var(--muted); margin-top:.15rem; }}
@@ -231,6 +233,12 @@ def side_title(text: str) -> None:
 def page_header(title: str, subtitle: str = "") -> None:
     sub = f"<p>{html.escape(subtitle)}</p>" if subtitle else ""
     st.html(f'<div class="nx-page-head"><h1>{html.escape(title)}</h1>{sub}</div>')
+
+
+def passage(text: str, limit: int | None = None) -> None:
+    """Show document text verbatim: source files are data, never Markdown to render."""
+    body = text if limit is None or len(text) <= limit else text[:limit].rstrip() + "…"
+    st.html(f'<div class="nx-passage">{html.escape(body)}</div>')
 
 
 def time_greeting() -> str:

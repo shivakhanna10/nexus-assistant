@@ -23,7 +23,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, Field
 
 from .config import settings
-from .llm import get_utility_model
+from .llm import get_utility_model, message_text
 
 # ======================================================== long-term memory
 MEMORY_PROMPT = """You are responsible for updating and maintaining accurate user memory.
@@ -159,7 +159,7 @@ def summarize_history(messages: list[AnyMessage], existing_summary: str, model) 
     # ToolMessages would be rejected by the provider.
     lines = []
     for m in old:
-        text = m.content if isinstance(m.content, str) else str(m.content)
+        text = message_text(m)
         if m.type == "human":
             lines.append(f"User: {text}")
         elif m.type == "ai" and text:
@@ -171,6 +171,6 @@ def summarize_history(messages: list[AnyMessage], existing_summary: str, model) 
         HumanMessage(content="Conversation:\n" + "\n".join(lines) + "\n\n" + instruction),
     ])
     return {
-        "summary": response.content,
+        "summary": message_text(response),
         "messages": [RemoveMessage(id=m.id) for m in old if m.id],
     }

@@ -15,7 +15,7 @@ from langgraph.graph import END, START, StateGraph
 from langsmith import traceable
 from pydantic import BaseModel, Field
 
-from .llm import get_chat_model, get_utility_model
+from .llm import get_chat_model, get_utility_model, message_text
 
 
 # ========================================================= essay evaluator
@@ -63,7 +63,7 @@ def final_evaluation(state: EssayState):
         f"Depth of analysis feedback: {state.get('analysis_feedback', '')}\n"
         f"Clarity of thought feedback: {state.get('clarity_feedback', '')}\n"
     )
-    overall = get_chat_model(temperature=0).invoke(prompt).content
+    overall = message_text(get_chat_model(temperature=0).invoke(prompt))
     scores = state.get("individual_scores", []) or []
     return {"overall_feedback": overall, "avg_score": (sum(scores) / len(scores)) if scores else 0.0}
 

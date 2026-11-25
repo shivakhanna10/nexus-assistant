@@ -5,7 +5,7 @@ import streamlit as st
 
 from nexus.rag import indexing
 from ui.common import status_footer
-from ui.theme import page_header
+from ui.theme import page_header, passage
 
 status_footer()
 page_header(
@@ -76,4 +76,4 @@ if q:
         page = d.metadata.get("page")
         where = f"{d.metadata.get('source')}" + (f", page {page + 1}" if isinstance(page, int) else "")
         with st.expander(where, icon=":material/article:"):
-            st.write(d.page_content)
+            passage(d.page_content)

@@ -9,7 +9,7 @@ from nexus import threads
 from nexus.config import settings
 from nexus.rag.crag import run_crag
 from ui.common import init_session, status_footer
-from ui.theme import page_header
+from ui.theme import page_header, passage
 
 init_session()
 status_footer()
@@ -63,12 +63,12 @@ if run and q:
             where = html.escape(str(d.metadata.get("source"))) + (f", page {page + 1}" if isinstance(page, int) else "")
             st.html(f'<div class="nx-score"><div class="bar"><span style="width:{s * 100:.0f}%"></span></div>'
                     f"<b>{s:.2f}</b> {where}</div>")
-            st.caption(d.page_content[:500] + ("…" if len(d.page_content) > 500 else ""))
+            passage(d.page_content, 500)
     if res.get("web_query"):
         with st.expander(f"Searched the web for “{res['web_query']}”", icon=":material/travel_explore:"):
             for d in res.get("web_docs", []):
                 st.markdown(f"**[{d.metadata.get('title') or d.metadata.get('url')}]({d.metadata.get('url')})**")
-                st.caption(d.page_content.split("CONTENT:", 1)[-1].strip()[:400])
+                passage(d.page_content.split("CONTENT:", 1)[-1].strip(), 400)
     if res.get("strips"):
         kept = set(res.get("kept_strips", []))
         with st.expander(f"Kept {len(kept)} of {len(res['strips'])} sentences", icon=":material/filter_alt:"):

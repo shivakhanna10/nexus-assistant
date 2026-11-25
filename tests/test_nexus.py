@@ -112,6 +112,26 @@ def test_upload_index_cache_and_crag(tmp_path):
     assert res["sources"][0]["label"] == "transformers.txt"
 
 
+def test_crag_uses_a_constant_number_of_model_calls(fake_models):
+    """Grading and refinement are batched: calls don't grow with chunks or sentences."""
+    tid = threads.new_thread_id()
+    threads.upsert_thread(tid, "hana")
+    indexing.ingest_upload((TRANSFORMER_TXT * 4).encode(), "long-notes.txt", tid)
+    type(fake_models).calls.clear()
+    res = crag.run_crag("What is a transformer?", thread_id=tid, include_knowledge=False, with_generation=False)
+    assert len(res["docs"]) >= 2 and len(res["strips"]) >= 6
+    assert type(fake_models).calls == ["ChunkGrades", "KeptSentences"]
+
+
+def test_content_block_replies_are_shown_as_plain_text():
+    """Providers that reply with content blocks must never leak raw block dicts to the UI."""
+    tid = threads.new_thread_id()
+    threads.upsert_thread(tid, "ivan")
+    indexing.ingest_upload(TRANSFORMER_TXT.encode(), "blocks.txt", tid)
+    assert crag.run_crag("What is a transformer?", thread_id=tid, include_knowledge=False)["answer"] == "Blocks answer."
+    assert evaluate_essay("Short essay. " * 10)["overall_feedback"] == "Blocks answer."
+
+
 def test_crag_incorrect_goes_to_web():
     tid = threads.new_thread_id()
     threads.upsert_thread(tid, "erin")

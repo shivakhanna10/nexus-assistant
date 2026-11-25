@@ -12,7 +12,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -50,6 +50,14 @@ class FakeChatModel(BaseChatModel):
 
     # -- structured outputs keyed by schema name
     def _structured(self, name: str, text: str) -> dict:
+        if name == "ChunkGrades":
+            chunks = re.findall(r"\[(\d+)\] (.*?)(?=\n\n\[\d+\] |\Z)", text.split("Chunks:", 1)[-1], re.S)
+            return {"grades": [{"score": 0.9 if "transformer" in c.lower() else 0.1, "reason": "fake"}
+                               for _, c in chunks]}
+        if name == "KeptSentences":
+            sents = re.findall(r"\[(\d+)\] (.*?)(?=\n\n\[\d+\] |\Z)", text.split("Sentences:", 1)[-1], re.S)
+            return {"keep": [int(i) for i, s in sents
+                             if "attention" in s.lower() or "transformer" in s.lower()]}
         if name == "DocEvalScore":
             score = 0.9 if "transformer" in text.lower() else 0.1
             return {"score": score, "reason": "fake grader"}
@@ -67,8 +75,11 @@ class FakeChatModel(BaseChatModel):
             return {"feedback": "Solid structure.", "score": 7}
         return {}
 
+    calls: ClassVar[list] = []  # schema/tool name of every call, for call-count assertions
+
     def _generate(self, messages: list[BaseMessage], stop=None, run_manager=None, **kwargs: Any) -> ChatResult:
         tools = kwargs.get("tools") or []
+        FakeChatModel.calls.append(tools[0]["function"]["name"] if tools and kwargs.get("tool_choice") else "chat")
         tool_choice = kwargs.get("tool_choice")
         text = "\n".join(m.content if isinstance(m.content, str) else str(m.content) for m in messages)
         last = messages[-1]
@@ -85,6 +96,9 @@ class FakeChatModel(BaseChatModel):
             msg = AIMessage(content="", tool_calls=[{
                 "name": "search_documents", "args": {"query": last.content[5:].strip()},
                 "id": f"call_{uuid.uuid4().hex[:8]}"}])
+        elif "Answer ONLY using the provided context" in text or "Based on the following feedback" in text:
+            # Gemini 3 / Anthropic style: a list of content blocks, not a string.
+            msg = AIMessage(content=[{"type": "text", "text": "Blocks answer.", "extras": {"signature": "abc"}}])
         elif isinstance(last, ToolMessage):
             msg = AIMessage(content=f"Tool said: {last.content}")
         else:
@@ -108,7 +122,7 @@ def fake_models(monkeypatch):
     llm.get_utility_model.cache_clear()
     for mod in ("nexus.rag.crag", "nexus.memory"):
         m = sys.modules.get(mod)
-        for attr in ("_chains", "_extractor"):
+        for attr in ("_chains", "_batch_chains", "_extractor"):
             if m is not None and hasattr(getattr(m, attr, None), "cache_clear"):
                 getattr(m, attr).cache_clear()
     import nexus.service as service

@@ -9,7 +9,8 @@ Faithful to the final ``corrective-rag/6_ambiguous`` notebook:
     refine = decompose into sentence strips -> LLM keep/drop filter -> recompose
     -> generate (optional; the chat agent does its own generation)
 
-Improvements: graders run in parallel (``.batch``), retrieval spans this chat's
+Improvements: all chunks are graded in one model call and all sentences filtered in
+one call (instead of one call per item, with a per-item fallback), retrieval spans this chat's
 uploads + the shared knowledge base, empty retrieval is treated as INCORRECT,
 web fallback can be disabled, and sources are returned for citations.
 """
@@ -26,7 +27,7 @@ from pydantic import BaseModel, Field
 
 from .. import web
 from ..config import settings
-from ..llm import get_chat_model, get_utility_model
+from ..llm import get_chat_model, get_utility_model, message_text
 from .indexing import retrieve
 
 
@@ -104,6 +105,38 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 
+# Batched variants: grade every chunk / filter every sentence in ONE call instead of
+# one call per item (~20 calls -> 2 per retrieval). Per-item chains remain as a fallback
+# when the model returns a malformed batch.
+class ChunkGrades(BaseModel):
+    grades: list[DocEvalScore] = Field(description="Exactly one grade per chunk, in the given order")
+
+
+class KeptSentences(BaseModel):
+    keep: list[int] = Field(description="Numbers of the sentences that directly help answer the question")
+
+
+BATCH_EVAL_PROMPT = ChatPromptTemplate.from_messages([
+    ("system",
+     "You are a strict retrieval evaluator for RAG.\n"
+     "You will be given a question and {n} numbered chunks. Grade EACH chunk independently.\n"
+     "Return exactly {n} grades, in the same order as the chunks, each with a relevance score "
+     "in [0.0, 1.0] and a short reason.\n"
+     "- 1.0: the chunk alone is sufficient to answer fully/mostly\n"
+     "- 0.0: the chunk is irrelevant\n"
+     "Be conservative with high scores."),
+    ("human", "Question: {question}\n\nChunks:\n{chunks}"),
+])
+
+BATCH_FILTER_PROMPT = ChatPromptTemplate.from_messages([
+    ("system",
+     "You are a strict relevance filter. You will be given a question and numbered sentences.\n"
+     "Return the numbers of the sentences that directly help answer the question, judging each "
+     "sentence on its own. Return an empty list if none do."),
+    ("human", "Question: {question}\n\nSentences:\n{sentences}"),
+])
+
+
 @lru_cache(maxsize=1)
 def _chains():
     llm = get_utility_model()
@@ -114,8 +147,48 @@ def _chains():
     )
 
 
+@lru_cache(maxsize=1)
+def _batch_chains():
+    llm = get_utility_model()
+    return (
+        BATCH_EVAL_PROMPT | llm.with_structured_output(ChunkGrades),
+        BATCH_FILTER_PROMPT | llm.with_structured_output(KeptSentences),
+    )
+
+
 def _batch_cfg() -> dict:
     return {"max_concurrency": settings.max_concurrency}
+
+
+def _numbered(items: list[str]) -> str:
+    return "\n\n".join(f"[{i}] {text}" for i, text in enumerate(items, 1))
+
+
+def grade_chunks(question: str, chunks: list[str]) -> list[float]:
+    """One relevance score per chunk, from a single model call when possible."""
+    batch_eval, _ = _batch_chains()
+    try:
+        out = batch_eval.invoke({"question": question, "n": len(chunks), "chunks": _numbered(chunks)})
+        if len(out.grades) == len(chunks):
+            return [g.score for g in out.grades]
+    except Exception:
+        pass
+    doc_eval, _, _ = _chains()  # fallback: one call per chunk, in parallel
+    outs = doc_eval.batch([{"question": question, "chunk": c} for c in chunks], config=_batch_cfg())
+    return [o.score for o in outs]
+
+
+def filter_sentences(question: str, sentences: list[str]) -> list[str]:
+    """The sentences that help answer the question, from a single model call when possible."""
+    _, batch_filter = _batch_chains()
+    try:
+        out = batch_filter.invoke({"question": question, "sentences": _numbered(sentences)})
+        keep = {i for i in out.keep if 1 <= i <= len(sentences)}
+        return [s for i, s in enumerate(sentences, 1) if i in keep]
+    except Exception:
+        _, filt, _ = _chains()  # fallback: one call per sentence, in parallel
+        decisions = filt.batch([{"question": question, "sentence": s} for s in sentences], config=_batch_cfg())
+        return [s for s, d in zip(sentences, decisions) if d.keep]
 
 
 # -------------------------------------------------------------------- nodes
@@ -134,11 +207,7 @@ def evaluate_node(state: CragState) -> CragState:
         return {"scores": [], "good_docs": [], "verdict": "INCORRECT",
                 "reason": "No indexed documents matched (or none are uploaded)."}
 
-    doc_eval, _, _ = _chains()
-    outs = doc_eval.batch(
-        [{"question": state["question"], "chunk": d.page_content} for d in docs], config=_batch_cfg()
-    )
-    scores = [o.score for o in outs]
+    scores = grade_chunks(state["question"], [d.page_content for d in docs])
     lower, upper = settings.crag_lower_threshold, settings.crag_upper_threshold
     good = [d for d, s in zip(docs, scores) if s > lower]
 
@@ -205,13 +274,7 @@ def refine_node(state: CragState) -> CragState:
         return {"strips": [], "kept_strips": [], "refined_context": context, "sources": _sources(docs)}
 
     strips = decompose_to_sentences(context)
-    kept: list[str] = []
-    if strips:
-        _, filt, _ = _chains()
-        decisions = filt.batch(
-            [{"question": state["question"], "sentence": s} for s in strips], config=_batch_cfg()
-        )
-        kept = [s for s, d in zip(strips, decisions) if d.keep]
+    kept = filter_sentences(state["question"], strips) if strips else []
     return {
         "strips": strips,
         "kept_strips": kept,
@@ -228,7 +291,7 @@ def generate_node(state: CragState) -> CragState:
     out = (ANSWER_PROMPT | get_chat_model(temperature=0)).invoke(
         {"question": state["question"], "context": context}
     )
-    return {"answer": out.content}
+    return {"answer": message_text(out)}
 
 
 def route_after_eval(state: CragState) -> str:

@@ -43,6 +43,23 @@ def get_embeddings(model: str | None = None) -> Embeddings:
     return OpenAIEmbeddings(model=name)
 
 
+def message_text(message) -> str:
+    """Plain text of a model reply. Some providers (e.g. Gemini 3, Anthropic) return a list
+    of content blocks rather than a string; never show those raw to users."""
+    content = getattr(message, "content", message)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+    return str(content or "")
+
+
 def embedding_dims(model: str | None = None) -> int:
     """Vector size, needed by the semantic long-term memory index."""
     name = (model or settings.embedding_model).split(":", 1)[-1].removeprefix("models/")
