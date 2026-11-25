@@ -1,0 +1,18 @@
+# Optional Postgres for persistent short- and long-term memory (from memory-in-llms).
+# Uses the pgvector image so SEMANTIC_MEMORY=true also works on Postgres.
+#   docker compose up -d
+#   POSTGRES_URI=postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5442:5432"
+    volumes:
+      - nexus-pg:/var/lib/postgresql/data
+
+volumes:
+  nexus-pg:

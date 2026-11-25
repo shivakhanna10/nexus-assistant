@@ -1,0 +1,49 @@
+# Nexus visual identity: spruce + brass "reading room".
+#   Spruce  #17322C  sidebar / ink-on-dark
+#   Paper   #F2F4F1  app canvas (cool green-grey, not cream)
+#   Ink     #1A2421  body text
+#   Patina  #1F6F5C  primary actions, links
+#   Brass   #D4A23F  the one highlight: brand mark, active conversation, sidebar CTA
+#   Mist    #DCE5E0  borders, user-message bubbles
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1F6F5C"
+backgroundColor = "#F2F4F1"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1A2421"
+linkColor = "#1F6F5C"
+borderColor = "#DCE5E0"
+greenColor = "#1F6F5C"
+yellowColor = "#9A6B12"
+redColor = "#B4433A"
+blueColor = "#2B5F54"
+blueBackgroundColor = "#E3ECE8"
+blueTextColor = "#24443C"
+codeBackgroundColor = "#EAEFEC"
+codeTextColor = "#1A2421"
+font = "Hanken Grotesk:https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
+headingFont = "Bricolage Grotesque:https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseFontSize = 15
+headingFontWeights = [650, 600, 600, 600, 600, 600]
+baseRadius = "10px"
+buttonRadius = "10px"
+
+[theme.sidebar]
+backgroundColor = "#17322C"
+secondaryBackgroundColor = "#21423A"
+textColor = "#E4ECE8"
+primaryColor = "#D4A23F"
+borderColor = "#2E5248"
+linkColor = "#E8C27A"
+codeBackgroundColor = "#21423A"

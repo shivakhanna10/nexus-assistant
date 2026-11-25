@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "math": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["C:/path/to/your/mcp-math-server/main.py"]
+    },
+    "expense": {
+      "transport": "streamable_http",
+      "url": "https://your-server.example.com/mcp"
+    }
+  }
+}
